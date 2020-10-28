@@ -21,11 +21,9 @@
     "url": "https://github.com/kpdait/bedctl/issues"
   },
   "homepage": "https://github.com/kpdait/bedctl#readme",
-  "devDependencies": {
+  "dependencies": {
+    "@types/google-apps-script": "^1.0.16",
     "clasp": "^1.0.0",
     "typescript": "^4.0.5"
-  },
-  "dependencies": {
-    "@types/google-apps-script": "^1.0.16"
   }
 }
