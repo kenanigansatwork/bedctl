@@ -15,7 +15,7 @@
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
  */
 const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
-    return runQUnit(e || null);
+    return processGetRequest(e || null);
 }
 
 /**
@@ -32,6 +32,7 @@ function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
     switch (route) {
         case 'tests': return runQUnit(e);
         case 'callsheet': return getCallsheet();
+        case 'home': return getHomePage();
         default: return getHomePage();
     }
 }
@@ -52,10 +53,12 @@ function getHomePage():GoogleAppsScript.HTML.HtmlOutput {
     return getHtmlOutput('<h1>home</h2>')
 }
 
+/**
+ * turn string into HtmlOutput object
+ * @param {GoogleAppsScript.HTML.HtmlOutput} content string content to include in HTML code
+ */
 function getHtmlOutput(content:string):GoogleAppsScript.HTML.HtmlOutput {
-    let html = HtmlService.createHtmlOutput();
-    html.append(content);
-    return html;
+    return HtmlService.createHtmlOutput().append(content);
 }
 
 /**
