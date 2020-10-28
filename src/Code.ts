@@ -10,11 +10,21 @@
  */
 
 /**
+ * GET endpoint
+ * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
+ */
+const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
+    e = e || {parameter:{},parameters:{},queryString:''};
+    return runQUnit(e);
+}
+
+/**
  * Runs QUnit unit tests, and returns the results as HtmlOutput
  * @param {GoogleAppsScript.Events.DoGet} e event object of GET request
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML of QUnit tests
  */
-const runQUnit = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
+function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
     QUnit.helpers(this);
 
     function testFunctions() {
@@ -39,16 +49,6 @@ const runQUnit = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
     });
     QUnit.load(testFunctions);
     return QUnit.getHtml();
-};
-
-/**
- * GET endpoint
- * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
- * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
- */
-const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
-    e = e || {parameter:{},parameters:{},queryString:''};
-    return runQUnit(e);
 }
 
 /**
