@@ -29,20 +29,32 @@ function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
     let defaultRoute = 'home'
     let route = e.parameter.route || defaultRoute;
     
-    switch (route) {
-        case 'tests': return runQUnit(e);
-        case 'callsheet': return getCallsheet();
-        case 'home': return getHomePage();
-        default: return getHomePage();
+    try {
+        switch (route) {
+            case 'tests': return runQUnit(e);
+            case 'callsheet': return getCallsheet(e);
+            case 'home': return getHomePage();
+            default: return getHomePage();
+        }
+    } catch(err) {
+        Logger.log(err);
+        return getHtmlOutput(`<strong>${err.name}</strong>: ${err.message}`);
     }
 }
 
 /**
  * return the callsheet page
+ * @param {GoogleAppsScript.Events.DoGet} e the GET request event object
  * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML code of the callsheet page
  */
-function getCallsheet():GoogleAppsScript.HTML.HtmlOutput {
-    return getHtmlOutput('<h1>callsheet</h2>')
+function getCallsheet(e:GoogleAppsScript.Events.DoGet):GoogleAppsScript.HTML.HtmlOutput {
+
+    const omnitool = new Omnitool(e);
+    return omnitool.getCallsheetHtmlOutput();
+    // throw err code:
+    // const err = new Error('this error occurred');
+    // err.name = 'TypeError';
+    // throw err;
 }
 
 /**
@@ -62,6 +74,24 @@ function getHtmlOutput(content:string):GoogleAppsScript.HTML.HtmlOutput {
 }
 
 /**
+ * CLASS: Omnitool
+ */
+class Omnitool {
+    constructor(e:GoogleAppsScript.Events.DoGet) {
+        this.e = e;
+    }
+
+    getCallsheetHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
+        return getHtmlOutput('<h1>callsheet</h2>')
+            .append(`<pre>${JSON.stringify(this.e,null,4)}<\/pre>`);
+    }
+    // throw err code:
+    // const err = new Error('this error occurred');
+    // err.name = 'TypeError';
+    // throw err;
+}
+
+/**
  * Runs QUnit unit tests, and returns the results as HtmlOutput
  * @param {GoogleAppsScript.Events.DoGet} e event object of GET request
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML of QUnit tests
@@ -71,6 +101,7 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
 
     function testFunctions() {
         testingGetHtmlOutput();
+        testingOmnitoolInitialization();
     }
 
     function testingGetHtmlOutput() {
@@ -78,6 +109,14 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             expect(2);
             equal(typeof getHtmlOutput('test'), 'object', "returns an HtmlObject");
             equal(getHtmlOutput('test').getContent().includes('test'), true, "should return content embeded in HtmlObject");
+        });
+    }
+
+    function testingOmnitoolInitialization() {
+        QUnit.test( "omnitool initialization testing", function() {
+            let omnitool = new Omnitool({});
+            expect(1);
+            equal(typeof omnitool,'object','initializes a new object');
         });
     }
 
