@@ -69,15 +69,24 @@ function processGetRequest(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput
 class Omnitool {
     
     e: object;
+    spreadsheetId: string;
     
     constructor(e:any) {
         this.e = e;
+        this.spreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
+    }
+
+    getHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
+        return HtmlService.createHtmlOutput()
+            .append('<link rel="stylesheet" href="https://bootswatch.com/4/cerulean/bootstrap.min.css">');
     }
 
     getCallsheetHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
-        let amionData = new AmionData();
-        return HtmlService.createHtmlOutput('<h1>callsheet</h2>')
-            .append(amionData.getHtmlTableData());
+        let amionData = new AmionData(this.spreadsheetId);
+        return this.getHtmlOutput()
+            .append('<div id="siteContainer" class="container"><h1>callsheet</h2>')
+            .append(amionData.getHtmlTableData())
+            .append('</div>');
     }
 
     getHomePage():GoogleAppsScript.HTML.HtmlOutput {
@@ -114,7 +123,9 @@ class AmionData {
         this.getUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}`; };
         this.getFetchUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}&${this.url.queryString.reportStr}`; };
         this.doctorNumbers = this.fetchDoctorNumbers();
-        this.includedServices = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('includedDivisions').getDataRange().getValues()
+        this.includedServices = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('includedDivisions')
+            .getRange(1,1,SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('includedDivisions').getLastRow(),1)
+            .getValues()
             .map(arr => arr[0]);
         this.requestDateTime = new Date;
 
@@ -174,26 +185,134 @@ class AmionData {
     }
 
     parseFilteredData(): Object[] {
-        return this.parseData().filter(obj => this.includedServices.includes(obj['Division']));
+        return this.parseData().filter(thisObj => this.includedServices.includes(thisObj['Division']));
     }
 
     getData(): Object[] {
         return this.parseFilteredData();
     }
 
+    getDateParts(dateStr,startTimeStr:string,endTimeStr) {
+        let startHH = parseInt(startTimeStr.substring(0,2)),
+            startMM = parseInt(startTimeStr.substring(2,4)),
+            endHH = parseInt(endTimeStr.substring(0,2)),
+            endMM = parseInt(endTimeStr.substring(2,4));
+        let startDateYY = parseInt("20" + dateStr.split('-')[2]),
+            startDateM = parseInt(dateStr.split('-')[1]),
+            startDateD = parseInt(dateStr.split('-')[0]);
+
+        let startDate = new Date(startDateYY,startDateM,startDateD,startHH,startMM,0,0);
+        
+        let endDateYY = startDateYY,
+            endDateM = startDateM,
+            endDateD = (startHH < endHH) ? startDateD : startDateD + 1;
+
+        let endDate = new Date(endDateYY,endDateM,endDateD,endHH,endMM,0,0);
+        return [startDate,endDate];
+    }
+
+    getStaffNumber(service,nameStr): String {
+        let nameParts = this.processNameParts(nameStr);
+        let [lastName,firstName,...rest] = nameParts;
+        let result;
+        result = this.doctorNumbers.filter(arr => arr[0] == service;);
+        let result2 = result.filter(arr => arr[1] == lastName);
+        let result3 = result2.filter(arr => arr[2] == firstName)[0];
+        let output = result3 ? result3[result3.length - 1] : 'ERR';
+        if (output === 'ERR') {
+            
+        }
+        return output;
+    }
+
+    getDateStr(date:Date) {
+        function padToTwoWithZeroes(str) {
+            let input = str.toString();
+            if (str.length >= 2) { return input; };
+            while (input.length < 2) {
+                input = "0" + input;
+            }
+            return input;
+        }
+
+        let days = ['Sun','Mon','Tues','Wed','Thurs','Fri','Sat'],
+            HH = padToTwoWithZeroes(date.getHours()),
+            MM = padToTwoWithZeroes(date.getMinutes()),
+            dayStr = days[date.getDay()];
+        return `${dayStr} ${HH}:${MM}`;
+    }
+
+    getNumberLinkHtml(numberStr:string):string {
+        const localAreaCode = '512';
+        if (numberStr.length < 10) return numberStr;
+        let numberStr2 = numberStr.replace(/[-._]/g,"");
+        const areaCode = numberStr2.toString().substr(0,3);
+        const middleNumbers = numberStr2.toString().substr(3,3);
+        const lastNumbers = numberStr2.toString().substr(6,4);
+        let href = "callto: "
+        if (areaCode === localAreaCode) {
+            href += '9-';
+        } else {
+            href += '91-';
+        }
+        href += areaCode + '-' + middleNumbers + '-' + lastNumbers;
+        let textNumber = `${areaCode}-${middleNumbers}-${lastNumbers}`;
+        return `<a href="${href}">${textNumber}<\/a>`;
+    }
+
+    parseDataToTableOutputArray(thisService,data) {
+        let processedData1 = data
+            .filter(o => o['Division'] == thisService)
+            .map((fields) => {
+                const {,Staff_Name,,Staff_Bid,Shift_Name,,,Date,Start_Time,End_Time} = fields;
+                let nameParts: String[] = this.processNameParts(Staff_Name);
+                let nameStr: String = `${nameParts[1]?nameParts[1]+" ":""}${nameParts[0]}`;
+                let staffNumber: String;
+                if (nameStr.match(/^(Call )?[0-9][0-9-]+$/)) {
+                    nameStr = nameStr.replace(/^(Call )/,"");
+                    staffNumber = nameStr.replace(/^(Call )/,"").replace(/[-_.,;]/g,"");
+                } else {
+                    staffNumber = this.getStaffNumber(thisService,Staff_Name);
+                }
+                let staffNumberLink = this.getNumberLinkHtml(staffNumber);
+                let [startDate,endDate]: Date[] = this.getDateParts(Date,Start_Time,End_Time);
+                let shiftDateStr: String = `${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}`;
+                let returnVal: Array<any> = [
+                    Shift_Name,
+                    shiftDateStr,
+                    nameStr,
+                    staffNumberLink
+                ];
+                return returnVal;
+            });
+
+        let processedData2 = processedData1
+            .map(fields => {
+                let returnFields = fields;
+                if (fields[0] === 'DCMC Pediatric Hospital Medicine PCRS 709-3293') {
+                    returnFields[0] = "DCMC PCRS Hospitalist";
+                    returnFields[2] = "PCRS";
+                }
+                return returnFields;
+            });
+        return processedData1;
+    }
+
     getHtmlTableData():string {
         //return `<table><tr><th>fetchData<\/th><td>${this.getData()}<\/td><\/tr><\/table>`;
         let data = this.getData();
+        //return `<pre>${JSON.stringify(data,null,4)}<\/pre>`;
         let output = '<table>';
         for (let k1 in this.includedServices) {
             let thisService = this.includedServices[k1];
-            output += '<tr><th colspan="' + this.headers.length.toString() + '">' + thisService + '</th></tr>';
-            let theseObj = data.filter(o => o['Service'] === thisService);
+            let theseObj: any = this.parseDataToTableOutputArray(thisService,data);
+            theseObj.sort();
+            output += '<tr><th colspan="' + theseObj.length.toString() + '">' + thisService + '</th></tr>';
             for (let k2 in theseObj) {
-                let thisObj = theseObj[k2];
+                let fields = theseObj[k2];
                 output += '<tr>'
-                for (let k3 in thisObj) {
-                    let field = thisObj[k3];
+                for (let k3 in fields) {
+                    let field = fields[k3];
                     output += '<td>' + field + '</td>';
                 }
                 output += '</tr>'
@@ -204,7 +323,7 @@ class AmionData {
     }
 
     processNameParts(nameStr:String): String[] {
-        let parts = nameStr.split(/,? /); 
+        let parts = nameStr.split(/,? /g); 
         parts = parts.map(str => str.trim());   // trim whitespace from all array parts
         parts = parts.filter(str => str != ''); // filter out blank strings
         if (!nameStr.includes(",")) {
@@ -250,10 +369,12 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
 
     function testingOmnitoolInitialization() {
         QUnit.test( "omnitool initialization testing", function() {
-            let omnitool = new Omnitool({});
-            expect(2);
+            let omnitool = new Omnitool({}),
+                correctSpreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
+            expect(3);
             equal(typeof omnitool,'object','initializes a new object');
             equal(typeof omnitool.e, 'object', 'initializes with an event object (e)');
+            equal(omnitool.spreadsheetId, correctSpreadsheetId, 'initializes with the correct spreadsheetId - ' + correctSpreadsheetId);
         });
     }
 
@@ -279,10 +400,11 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
         QUnit.test('amionData initialization testing', function() {
             let amionData = new AmionData(),
                 url = 'https://amion.com/cgi-bin/ocs?Lo=seton+bb16',
-                fetchUrl = url + '&Rpt=619tabs--';
+                fetchUrl = url + '&Rpt=619tabs--',
+                correctSpreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
             expect(7);
             equal(typeof amionData, 'object','initializes a new object');
-            equal(amionData.spreadsheetId, '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8');
+            equal(amionData.spreadsheetId, correctSpreadsheetId, 'initializes with correct spreadsheetId - ' + correctSpreadsheetId); 
             equal(amionData.getUrl(), url, 'initializes with web url - ' + url);
             equal(amionData.getFetchUrl(), fetchUrl, 'initializes with fetch url - ' + fetchUrl);
             equal(typeof amionData.fetchData, 'string', 'fetchData property is a string');
@@ -323,7 +445,7 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let amionData = new AmionData(),
                 result = amionData.getData();
             expect(1);
-            equal(typeof result, 'string', 'initializes a new string');
+            equal(typeof result, 'object', 'initializes a new string');
         });
     }
 
@@ -332,9 +454,8 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let amionData = new AmionData(),
                 amionDataGetData = amionData.getData(),
                 result = amionData.getHtmlTableData();
-            expect(2);
+            expect(1);
             equal(typeof result, 'string', 'initializes a new string');
-            equal(result.includes(amionDataGetData), true, 'initializes a new string containing result of getData()');
         });
     }
 
