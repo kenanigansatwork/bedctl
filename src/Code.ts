@@ -15,7 +15,7 @@
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
  */
 const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
-    return processGetRequest(e || null);
+    return processGetRequest(e || {});
 }
 
 /**
@@ -32,45 +32,14 @@ function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
     try {
         switch (route) {
             case 'tests': return runQUnit(e);
-            case 'callsheet': return getCallsheet(e);
-            case 'home': return getHomePage();
+            case 'callsheet': return new Omnitool(e).getCallsheetHtmlOutput();
+            case 'home': return new Omnitool(e).getHomePage();
             default: return getHomePage();
         }
     } catch(err) {
         Logger.log(err);
         return getHtmlOutput(`<strong>${err.name}</strong>: ${err.message}`);
     }
-}
-
-/**
- * return the callsheet page
- * @param {GoogleAppsScript.Events.DoGet} e the GET request event object
- * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML code of the callsheet page
- */
-function getCallsheet(e:GoogleAppsScript.Events.DoGet):GoogleAppsScript.HTML.HtmlOutput {
-
-    const omnitool = new Omnitool(e);
-    return omnitool.getCallsheetHtmlOutput();
-    // throw err code:
-    // const err = new Error('this error occurred');
-    // err.name = 'TypeError';
-    // throw err;
-}
-
-/**
- * return the home page
- * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML code of the home page
- */
-function getHomePage():GoogleAppsScript.HTML.HtmlOutput {
-    return getHtmlOutput('<h1>home</h2>')
-}
-
-/**
- * turn string into HtmlOutput object
- * @param {GoogleAppsScript.HTML.HtmlOutput} content string content to include in HTML code
- */
-function getHtmlOutput(content:string):GoogleAppsScript.HTML.HtmlOutput {
-    return HtmlService.createHtmlOutput().append(content);
 }
 
 /**
@@ -82,13 +51,17 @@ class Omnitool {
     }
 
     getCallsheetHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
-        return getHtmlOutput('<h1>callsheet</h2>')
+        return HtmlService.createHtmlOutput('<h1>callsheet</h2>')
             .append(`<pre>${JSON.stringify(this.e,null,4)}<\/pre>`);
     }
     // throw err code:
     // const err = new Error('this error occurred');
     // err.name = 'TypeError';
     // throw err;
+
+    getHomePage():GoogleAppsScript.HTML.HtmlOutput {
+        return HtmlService.createHtmlOutput('<h1>Home - bedctl</h2>');
+    }
 }
 
 /**
@@ -100,23 +73,35 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
     QUnit.helpers(this);
 
     function testFunctions() {
-        testingGetHtmlOutput();
         testingOmnitoolInitialization();
-    }
-
-    function testingGetHtmlOutput() {
-        QUnit.test( "generate HtmlOutput object testing", function() {
-            expect(2);
-            equal(typeof getHtmlOutput('test'), 'object', "returns an HtmlObject");
-            equal(getHtmlOutput('test').getContent().includes('test'), true, "should return content embeded in HtmlObject");
-        });
+        testingOmnitoolGetCallsheetMethod();
+        testingOmnitoolGetHomePageMethod();
     }
 
     function testingOmnitoolInitialization() {
         QUnit.test( "omnitool initialization testing", function() {
             let omnitool = new Omnitool({});
-            expect(1);
+            expect(2);
             equal(typeof omnitool,'object','initializes a new object');
+            equal(typeof omnitool.e, 'object', 'initializes with an event object (e)');
+        });
+    }
+
+    function testingOmnitoolGetCallsheetMethod() {
+        QUnit.test( "omnitool mehod testing - getCallsheetHtmlOutput", function() {
+            let omnitool = new Omnitool({}),
+                result = omnitool.getCallsheetHtmlOutput();
+            expect(1);
+            equal(typeof result,'object','initializes a new object');
+        });
+    }
+
+    function testingOmnitoolGetHomePageMethod() {
+        QUnit.test( "omnitool mehod testing - getHomePage", function() {
+            let omnitool = new Omnitool({}),
+                result = omnitool.getHomePage();
+            expect(1);
+            equal(typeof result,'object','initializes a new object');
         });
     }
 
