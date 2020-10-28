@@ -14,12 +14,7 @@ declare namespace QUnit {
         config: any,
         load: any,
         getHtml: any,
-        qunitTestFunction: () => {
-            expect: any,
-                equal: any,
-                deepEqual: any;
-        },
-        test: (str:string,cb:() => {}) => {};
+        test: (str:string,cb:Function) => {};
 };
 
 declare interface getRequestEvent {
@@ -30,13 +25,21 @@ declare interface getRequestEvent {
     queryString: string;
 }
 
+declare interface globals {
+    String:any;
+}
+
+const globals = {
+    spreadsheetId: '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8'
+}
+
 /**
  * GET endpoint
  * @param {getRequestEvent} e event object describing GET request parameters
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
  */
 const doGet = (e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput => {
-    return processGetRequest(e || {});
+    return processGetRequest(e || {parameter: {route: 'home'},parameters: {route: ['home']}, queryString: 'route=home'});
 }
 
 /**
@@ -47,12 +50,12 @@ const doGet = (e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput => {
 function processGetRequest(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
     // assign default route
     // - route should be string property of the object property "parameter" of the event object (e)
-    let defaultRoute = 'home'
-    let route = e.parameter.route || defaultRoute;
+    let defaultRoute:string = 'home'
+    let route:string = e.parameter.route || defaultRoute;
     
     try {
         switch (route) {
-            case 'tests': return runQUnit(e);
+            case 'tests': return runQUnitTests(e);
             case 'callsheet': return new Omnitool(e).getCallsheetHtmlOutput();
             case 'home': return new Omnitool(e).getHomePage();
             default: return new Omnitool(e).getHomePage();
@@ -73,7 +76,7 @@ class Omnitool {
     
     constructor(e:any) {
         this.e = e;
-        this.spreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
+        this.spreadsheetId = globals.spreadsheetId;
     }
 
     getHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
@@ -82,7 +85,7 @@ class Omnitool {
     }
 
     getCallsheetHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
-        let amionData = new AmionData(this.spreadsheetId);
+        let amionData = new AmionData();
         return this.getHtmlOutput()
             .append('<div id="siteContainer" class="container"><h1>callsheet</h2>')
             .append(amionData.getHtmlTableData())
@@ -99,54 +102,70 @@ class Omnitool {
  */
 class AmionData {
     
+    requestDateTime: Date;
     url: Object;
+    
+    spreadsheetId: string;
+    doctorNumbers: any;
+    includedServices: string[];
+    
     getUrl: Function;
     getFetchUrl: Function;
-    fetchData: any;
-    doctorNumbers: any;
-    spreadsheetId: string;
+    
+    fetchedData: any;
     parsedFetchData: Object[];
-    includedServices: String[];
-    requestDateTime: Date;
-    headers: String[];
+
+    parsedAmionHeaders: string[];
+    
+
 
     constructor() {
 
-        this.url = {
-            base: 'https://amion.com/cgi-bin/ocs',
-            queryString: {
-                loginStr: 'Lo=seton+bb16',
-                reportStr: 'Rpt=619tabs--'
-            }
-        }
-        this.spreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
-        this.getUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}`; };
-        this.getFetchUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}&${this.url.queryString.reportStr}`; };
-        this.doctorNumbers = this.fetchDoctorNumbers();
-        this.includedServices = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('includedDivisions')
-            .getRange(1,1,SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('includedDivisions').getLastRow(),1)
-            .getValues()
-            .map(arr => arr[0]);
-        this.requestDateTime = new Date;
-
         try {
-            this.fetchData = this.fetchAmionData();
-            this.parsedFetchData = this.parseData();
+            this.requestDateTime = new Date;
+            this.url = {
+                base: 'https://amion.com/cgi-bin/ocs',
+                queryString: {
+                    loginStr: 'Lo=seton+bb16',
+                    reportStr: 'Rpt=619tabs--'
+                }
+            }
+            this.spreadsheetId = globals.spreadsheetId;
+            this.doctorNumbers = this.fetchDoctorNumbers();
+            this.includedServices = this.fetchIncludedServices();
+            
+            this.getUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}`; };
+            this.getFetchUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}&${this.url.queryString.reportStr}`; };
+            
+            this.fetchedData = this.fetchAmionData();
+            this.parsedFetchData = this.parseAmionData();
+
         } catch(err) {
             Logger.log('amionData.constructor Error: ', err)
-            this.fetchData = 'amionData.constructor Error: ', JSON.stringify(err);
+            let output = 'amionData.constructor Error: ' + JSON.stringify(err);
+            this.fetchedData = output;
         }
+
+    }
+
+    fetchIncludedServices(): string[] {
+        let wb = SpreadsheetApp.openById(this.spreadsheetId),
+            ws = wb.getSheetByName('includedDivisions'),
+            range = ws.getRange(1,1,ws.getLastRow(),1);
+        return range.getValues()
+            .map(arr => arr[0]);
     }
 
     fetchDoctorNumbers(): Array<any> {
         let dataSheet = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('doctorNumbers'),
             data = dataSheet.getRange(2,1,dataSheet.getLastRow(),dataSheet.getLastColumn())
                 .getValues();
+                
         return data;
     }
     
     fetchAmionData():string {
-        let res
+        let res:GoogleAppsScript.URL_Fetch.HTTPResponse
         try {
             res = UrlFetchApp.fetch(this.getFetchUrl());
             if (res.getResponseCode() === 200) {
@@ -161,38 +180,28 @@ class AmionData {
         }
     }
 
-    parseData(): Object[] {
+    parseAmionData(): Object[] {
         // return JSON.stringify(this.doctorNumbers.filter(arr => arr[0] !== ""), null, 4);
-        let lines = this.fetchData.split('\n');
-        lines = lines.map(arr => arr.split('\t'));
-        const headers: String[] = lines.shift();
-        if (!this.headers) this.headers = headers;
-        const outputArr:Object[] = [];
-        for (let k in lines) {
-            let thisVal: String[] = lines[k],
+        let lines: string[] = this.fetchedData.split('\n'),
+            recordLines: Array<string[]> = lines.map(arr => arr.split('\t'));
+        const headers: string[] = recordLines.shift();
+        
+        if (!this.parsedAmionHeaders) { this.parsedAmionHeaders = headers; }
+
+        const outputArr: Object[] = [];
+        
+        for (let k in recordLines) {
+            let thisVal: string[] = recordLines[k],
                 thisObj:Object = {};
             for (let k2 in thisVal) {
-                let thisValVal:String =  thisVal[k2],
-                    thisHeader:String = headers[k2]
-                thisObj[`${thisHeader}`] = thisValVal;
-                if (thisHeader === 'Staff_Name')  {
-                    thisObj[`${thisHeader}_Parts`] = this.processNameParts(thisValVal);
-                }
+                thisObj[`${headers[k2]}`] = thisVal[k2];
             }
             outputArr.push(thisObj);
         }
         return outputArr;
     }
 
-    parseFilteredData(): Object[] {
-        return this.parseData().filter(thisObj => this.includedServices.includes(thisObj['Division']));
-    }
-
-    getData(): Object[] {
-        return this.parseFilteredData();
-    }
-
-    getDateParts(dateStr,startTimeStr:string,endTimeStr) {
+    getDateParts(dateStr,startTimeStr:string,endTimeStr): Date[] {
         let startHH = parseInt(startTimeStr.substring(0,2)),
             startMM = parseInt(startTimeStr.substring(2,4)),
             endHH = parseInt(endTimeStr.substring(0,2)),
@@ -211,118 +220,53 @@ class AmionData {
         return [startDate,endDate];
     }
 
-    getStaffNumber(service,nameStr): String {
-        let nameParts = this.processNameParts(nameStr);
-        let [lastName,firstName,...rest] = nameParts;
-        let result;
-        result = this.doctorNumbers.filter(arr => arr[0] == service;);
-        let result2 = result.filter(arr => arr[1] == lastName);
-        let result3 = result2.filter(arr => arr[2] == firstName)[0];
-        let output = result3 ? result3[result3.length - 1] : 'ERR';
-        if (output === 'ERR') {
-            
-        }
-        return output;
+    getStaffNumber(service:string,nameStr:string): string {
+        let nameParts: string[] = this.processNameParts(nameStr),
+            [lastName,firstName,...rest] = nameParts,
+            serviceResults: Array<string[]> = this.doctorNumbers.filter(arr => arr[0] == service),
+            lastNameMatches: Array<string[]> = serviceResults.filter(arr => arr[1] == lastName),
+            firstAndLastNameMatches: Array<string[]> = lastNameMatches.filter(arr => arr[2] == firstName),
+            firstMatch: string[] = firstAndLastNameMatches[0];
+        return firstMatch ? firstMatch[firstMatch.length - 1] : 'ERR';
     }
 
-    getDateStr(date:Date) {
-        function padToTwoWithZeroes(str) {
-            let input = str.toString();
+    getDateStr(date:Date): string {
+        function padToTwoWithZeroes(str:string):string {
+            let input = str;
             if (str.length >= 2) { return input; };
-            while (input.length < 2) {
-                input = "0" + input;
-            }
+            while (input.length < 2) { input = "0" + input; }
             return input;
         }
-
-        let days = ['Sun','Mon','Tues','Wed','Thurs','Fri','Sat'],
-            HH = padToTwoWithZeroes(date.getHours()),
-            MM = padToTwoWithZeroes(date.getMinutes()),
-            dayStr = days[date.getDay()];
-        return `${dayStr} ${HH}:${MM}`;
+        function getDayOfWeek(idx:number): string {
+            const days = ['Sun','Mon','Tues','Wed','Thurs','Fri','Sat'];
+            return days[idx];
+        }
+        let HH = padToTwoWithZeroes(date.getHours().toString()),
+            MM = padToTwoWithZeroes(date.getMinutes().toString()),
+            dayStr = getDayOfWeek(date.getDay());
+        //return `${dayStr} ${HH}:${MM}`;
+        return `${HH}:${MM}`;
     }
 
     getNumberLinkHtml(numberStr:string):string {
         const localAreaCode = '512';
         if (numberStr.length < 10) return numberStr;
         let numberStr2 = numberStr.replace(/[-._]/g,"");
-        const areaCode = numberStr2.toString().substr(0,3);
-        const middleNumbers = numberStr2.toString().substr(3,3);
-        const lastNumbers = numberStr2.toString().substr(6,4);
-        let href = "callto: "
+        const areaCode:string = numberStr2.toString().substr(0,3),
+              middleNumbers:string = numberStr2.toString().substr(3,3),
+              lastNumbers:string = numberStr2.toString().substr(6,4);
+        let href:string = "callto: "
         if (areaCode === localAreaCode) {
             href += '9-';
         } else {
             href += '91-';
         }
         href += areaCode + '-' + middleNumbers + '-' + lastNumbers;
-        let textNumber = `${areaCode}-${middleNumbers}-${lastNumbers}`;
+        let textNumber:string = `<code>${areaCode}-${middleNumbers}-${lastNumbers}</code>`;
         return `<a href="${href}">${textNumber}<\/a>`;
     }
 
-    parseDataToTableOutputArray(thisService,data) {
-        let processedData1 = data
-            .filter(o => o['Division'] == thisService)
-            .map((fields) => {
-                const {,Staff_Name,,Staff_Bid,Shift_Name,,,Date,Start_Time,End_Time} = fields;
-                let nameParts: String[] = this.processNameParts(Staff_Name);
-                let nameStr: String = `${nameParts[1]?nameParts[1]+" ":""}${nameParts[0]}`;
-                let staffNumber: String;
-                if (nameStr.match(/^(Call )?[0-9][0-9-]+$/)) {
-                    nameStr = nameStr.replace(/^(Call )/,"");
-                    staffNumber = nameStr.replace(/^(Call )/,"").replace(/[-_.,;]/g,"");
-                } else {
-                    staffNumber = this.getStaffNumber(thisService,Staff_Name);
-                }
-                let staffNumberLink = this.getNumberLinkHtml(staffNumber);
-                let [startDate,endDate]: Date[] = this.getDateParts(Date,Start_Time,End_Time);
-                let shiftDateStr: String = `${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}`;
-                let returnVal: Array<any> = [
-                    Shift_Name,
-                    shiftDateStr,
-                    nameStr,
-                    staffNumberLink
-                ];
-                return returnVal;
-            });
-
-        let processedData2 = processedData1
-            .map(fields => {
-                let returnFields = fields;
-                if (fields[0] === 'DCMC Pediatric Hospital Medicine PCRS 709-3293') {
-                    returnFields[0] = "DCMC PCRS Hospitalist";
-                    returnFields[2] = "PCRS";
-                }
-                return returnFields;
-            });
-        return processedData1;
-    }
-
-    getHtmlTableData():string {
-        //return `<table><tr><th>fetchData<\/th><td>${this.getData()}<\/td><\/tr><\/table>`;
-        let data = this.getData();
-        //return `<pre>${JSON.stringify(data,null,4)}<\/pre>`;
-        let output = '<table>';
-        for (let k1 in this.includedServices) {
-            let thisService = this.includedServices[k1];
-            let theseObj: any = this.parseDataToTableOutputArray(thisService,data);
-            theseObj.sort();
-            output += '<tr><th colspan="' + theseObj.length.toString() + '">' + thisService + '</th></tr>';
-            for (let k2 in theseObj) {
-                let fields = theseObj[k2];
-                output += '<tr>'
-                for (let k3 in fields) {
-                    let field = fields[k3];
-                    output += '<td>' + field + '</td>';
-                }
-                output += '</tr>'
-            }
-        }
-        output += '</table>';
-        return output;
-    }
-
-    processNameParts(nameStr:String): String[] {
+    processNameParts(nameStr:String): string[] {
         let parts = nameStr.split(/,? /g); 
         parts = parts.map(str => str.trim());   // trim whitespace from all array parts
         parts = parts.filter(str => str != ''); // filter out blank strings
@@ -338,6 +282,146 @@ class AmionData {
         }
         return parts;
     }
+
+    parseDataPeriNatalOutput(data: Array<any>): Array<any> {
+        let input:Array<any> = data
+            .filter((arr:Array<any>): boolean => {
+                return (!arr[1].includes('WellMed'));
+            });
+        return input;
+    }
+
+    parseDataCardsSTEMIOutput(data: Array<any>): Array<any> {
+        let input:Array<any> = data
+            .filter((arr:Array<any>): boolean => {
+                return (!arr[1].includes('WellMed'));
+            });
+        return input;
+    }
+
+    parseDataStrokeOutput(data: Array<any>): Array<any> {
+        let input:Array<any> = data
+            .filter((arr:Array<any>): boolean => {
+                return (!arr[1].includes('WellMed'));
+            });
+        return input;
+    }
+
+    parseDataInternalMedicineOutput(data: Array<any>): Array<any> {
+        let input:Array<any> = data
+            .filter((arr:Array<any>): boolean => {
+                return (!arr[1].includes('WellMed'));
+            });
+        return input;
+    }
+
+    parseDataCriticalCareOutput(data: Array<any>): Array<any> {
+        let input:Array<any> = data
+            .filter((arr:Array<any>): boolean => {
+                return (!arr[1].includes('WellMed'));
+            });
+        return input;
+    }
+
+    parseDataCardsSHIOutput(data: Array<any>): Array<any> {
+        let input:Array<any> = data
+            .filter((arr:Array<any>): boolean => {
+                return (!arr[1].includes('WellMed'));
+            });
+        return input;
+    }
+
+    parseDataToTableOutputArray(thisService:string,data:Array<Object>): Array<any> {
+        let processedData1: Array<any> = data
+            .filter((o:Object):boolean => o['Division'] == thisService)
+            .map((fields:Object):Array<any> => {
+                let staffName = fields['Staff_Name'],
+                    shiftName = fields['Shift_Name'],
+                    shiftDate = fields['Date'],
+                    shiftStartTime = fields['Start_Time'],
+                    shiftEndTime = fields['End_Time'];
+                let nameParts: String[] = this.processNameParts(staffName);
+                let nameStr: string = `${nameParts[1] ? nameParts[1] + " " : ""}${nameParts[0]}`;
+                let staffNumber: string;
+                if (nameStr.match(/^(Call )?[0-9][0-9-]+$/)) {
+                    nameStr = nameStr.replace(/^(Call )/,"");
+                    staffNumber = nameStr.replace(/^(Call )/,"").replace(/[-_.,;]/g,"");
+                } else {
+                    staffNumber = this.getStaffNumber(thisService,staffName);
+                }
+                let staffNumberLink = this.getNumberLinkHtml(staffNumber);
+                let [startDate,endDate]: Date[] = this.getDateParts(shiftDate,shiftStartTime,shiftEndTime);
+                let shiftDateStr: String = `${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}`;
+                let returnVal: Array<any> = [
+                    shiftName,
+                    shiftDateStr,
+                    nameStr,
+                    staffNumberLink
+                ];
+                return returnVal;
+            });
+
+        let processedData2: Array<any> = processedData1
+            .map((fields: Array<any>): Array<any> => {
+                let returnFields = fields;
+                if (fields[0] === 'DCMC Pediatric Hospital Medicine PCRS 709-3293') {
+                    returnFields[0] = "DCMC PCRS Hospitalist";
+                    returnFields[2] = "PCRS";
+                }
+                return returnFields;
+            });
+        
+        let processedData3: Array<any>;
+        switch (thisService) {
+            case "Internal Medicine":
+                processedData3 = this.parseDataInternalMedicineOutput(processedData2);
+            case "Critical Care/Pulmonary":
+                processedData3 = this.parseDataCriticalCareOutput(processedData2);
+            case "Cardiology SHI":
+                processedData3 = this.parseDataCardsSHIOutput(processedData2);
+            case "Peri-Natal":
+                processedData3 = this.parseDataPeriNatalOutput(processedData2);
+            case "Cardiology STEMI":
+                processedData3 = this.parseDataCardsSTEMIOutput(processedData2);
+            case "Neurology-StrokeTC":
+                processedData3 = this.parseDataStrokeOutput(processedData2);
+            default:
+                processedData3 = processedData2;
+        }
+        return processedData3;
+    }
+
+    getData(): Object[] {
+        return this.parsedFetchData;
+    }
+
+    getHtmlTableData():string {
+        let data = this.getData();
+        // begin table HTML
+        let output = '<table>';
+        for (let k1 in this.includedServices) {
+            let thisService:string = this.includedServices[k1];
+            let theseObj: any = this.parseDataToTableOutputArray(thisService,data);
+            theseObj.sort();
+            // adding header row for service
+            output += '<tr><th colspan="' + theseObj.length.toString() + '">' + thisService + '</th></tr>';
+            for (let k2 in theseObj) {
+                let fields = theseObj[k2];
+                // adding new row for shift
+                output += '<tr>'
+                for (let k3 in fields) {
+                    let field = fields[k3];
+                    // adding each cell for shift
+                    output += '<td>' + field + '</td>';
+                }
+                // end new shift row
+                output += '</tr>'
+            }
+        }
+        // end table tag
+        output += '</table>';
+        return output;
+    }
 }
 
 /**
@@ -345,7 +429,7 @@ class AmionData {
  * @param {GoogleAppsScript.Events.DoGet} e event object of GET request
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML of QUnit tests
  */
-function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
     QUnit.helpers(this);
 
     QUnit.config({
@@ -369,8 +453,9 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
 
     function testingOmnitoolInitialization() {
         QUnit.test( "omnitool initialization testing", function() {
-            let omnitool = new Omnitool({}),
-                correctSpreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
+            let event: getRequestEvent = {parameter: {route: 'home'},parameters: {route: ['home']}, queryString: 'route=home'},
+                omnitool: Omnitool = new Omnitool(event),
+                correctSpreadsheetId: string = globals.spreadsheetId;
             expect(3);
             equal(typeof omnitool,'object','initializes a new object');
             equal(typeof omnitool.e, 'object', 'initializes with an event object (e)');
@@ -401,7 +486,7 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let amionData = new AmionData(),
                 url = 'https://amion.com/cgi-bin/ocs?Lo=seton+bb16',
                 fetchUrl = url + '&Rpt=619tabs--',
-                correctSpreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
+                correctSpreadsheetId = globals.spreadsheetId;
             expect(7);
             equal(typeof amionData, 'object','initializes a new object');
             equal(amionData.spreadsheetId, correctSpreadsheetId, 'initializes with correct spreadsheetId - ' + correctSpreadsheetId); 
