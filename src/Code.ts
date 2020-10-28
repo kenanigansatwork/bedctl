@@ -46,7 +46,10 @@ const runQUnit = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
  * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
  */
-const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => runQUnit(e);
+const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
+    e = e || {parameter:{},parameters:{},queryString:''};
+    return runQUnit(e);
+}
 
 /**
  * test function, used for QUnit boilerplate test suite
