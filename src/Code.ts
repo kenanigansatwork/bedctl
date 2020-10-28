@@ -14,7 +14,10 @@ declare namespace QUnit {
         config: any,
         load: any,
         getHtml: any,
-        test: (str:string,cb:Function) => {};
+        test: Function
+    interface QUnitTest {
+        test(str:string,cb:() => {}):any
+    }
 };
 
 declare interface getRequestEvent {
@@ -116,8 +119,6 @@ class AmionData {
     parsedFetchData: Object[];
 
     parsedAmionHeaders: string[];
-    
-
 
     constructor() {
 
@@ -158,7 +159,7 @@ class AmionData {
 
     fetchDoctorNumbers(): Array<any> {
         let dataSheet = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('doctorNumbers'),
-            data = dataSheet.getRange(2,1,dataSheet.getLastRow(),dataSheet.getLastColumn())
+            data = dataSheet.getRange(2,1,dataSheet.getLastRow(),4)
                 .getValues();
                 
         return data;
@@ -283,85 +284,119 @@ class AmionData {
         return parts;
     }
 
-    parseDataPeriNatalOutput(data: Array<any>): Array<any> {
+    parseDataPeriNatalOutput(data: Array<any>): Array<string[]> {
         let input:Array<any> = data
-            .filter((arr:Array<any>): boolean => {
-                return (!arr[1].includes('WellMed'));
+            .filter((arr:Array<any>): boolean => !arr[1].endsWith('SMCW Maternal-Fetal'));
+        return input;
+    }
+
+    parseDataCardsSTEMIOutput(data: Array<any>): Array<string[]> {
+        let input:Array<any> = data
+            .map((arr:Array<string>): Array<string> => {
+                let outputArr = arr;
+                if (outputArr[0].includes(" SHI")) {
+                    outputArr[0] = outputArr[0].replace(/ SHI/,"");
+                }
+                return arr;
             });
         return input;
     }
 
-    parseDataCardsSTEMIOutput(data: Array<any>): Array<any> {
+    parseDataStrokeOutput(data: Array<any>): Array<string[]> {
         let input:Array<any> = data
-            .filter((arr:Array<any>): boolean => {
-                return (!arr[1].includes('WellMed'));
-            });
+            .filter((arr:Array<string>): boolean => arr[0] != 'Sound Telemedicine' && !arr[0].includes('('));
         return input;
     }
 
-    parseDataStrokeOutput(data: Array<any>): Array<any> {
+    parseDataInternalMedicineOutput(data: Array<string[]>): Array<any> {
+        let numbers = {
+            SMCA: '5129621642',
+            SMCH: '5129319694',
+            SMCW: '5126889186',
+            SNW: '5129691279',
+            DSMCUT: '5122041218',
+        }
+        let dsmcutItem:Array<string> = ['DSMCUT Hospitalist On Duty']
         let input:Array<any> = data
             .filter((arr:Array<any>): boolean => {
-                return (!arr[1].includes('WellMed'));
+                return !arr[0].includes('Escalation') && !arr[1].includes('Escalation')
+                    && !arr[0].includes('WellMed') && !arr[1].includes('WellMed')
+                    && !arr[0].includes('HIT ') && !arr[1].includes('HIT ')
+                    && !arr[0].includes('SHL ') && !arr[1].includes('SHL ')
+                    && !arr[0].startsWith('SSW ') && !arr[1].startsWith('SSW ')
+                    && !arr[0].startsWith('DSMC-UT Morning') && !arr[1].startsWith('DSMC-UT Morning')
+                    && !arr[0].startsWith('Sound Telemedicine') && !arr[1].startsWith('Sound Telemedicine');
+            })
+            .map((arr:Array<string>):Array<string> => {
+                let output:Array<string> = arr;
+                if (output[0].includes('SMCA')) {
+                    output[output.length - 1] = this.getNumberLinkHtml(numbers.SMCA);
+                } else if (output[0].includes('SMCH')) {
+                    output[output.length - 1] = this.getNumberLinkHtml(numbers.SMCH);
+                } else if (output[0].includes('SMCW')) {
+                    output[output.length - 1] = this.getNumberLinkHtml(numbers.SMCW);
+                } else if (output[0].includes('SNW')) {
+                    output[output.length - 1] = this.getNumberLinkHtml(numbers.SNW);
+                }
+
+                if (output[0] === 'DCMC PCRS Hospitalist') {
+                    dsmcutItem.push(output[1]);
+                }
+                return output;
             });
+            dsmcutItem.push('Internal Med Pager');
+            dsmcutItem.push(this.getNumberLinkHtml(numbers.DSMCUT));
+        input.unshift(dsmcutItem);
+
         return input;
     }
 
-    parseDataInternalMedicineOutput(data: Array<any>): Array<any> {
+    parseDataCriticalCareOutput(data: Array<string[]>): Array<any> {
         let input:Array<any> = data
-            .filter((arr:Array<any>): boolean => {
-                return (!arr[1].includes('WellMed'));
-            });
+            .filter((arr:Array<any>): boolean => !arr[0].includes(' Pulmonary Consults'));
         return input;
     }
 
-    parseDataCriticalCareOutput(data: Array<any>): Array<any> {
+    parseDataCardsSHIOutput(data: Array<string[]>): Array<any> {
         let input:Array<any> = data
-            .filter((arr:Array<any>): boolean => {
-                return (!arr[1].includes('WellMed'));
-            });
+            .filter((arr:Array<any>): boolean => !arr[0].includes('EP SHI') && !arr[0].includes('SNW ') && !arr[0].includes('STEMI'));
         return input;
     }
 
-    parseDataCardsSHIOutput(data: Array<any>): Array<any> {
-        let input:Array<any> = data
-            .filter((arr:Array<any>): boolean => {
-                return (!arr[1].includes('WellMed'));
-            });
-        return input;
+    getDateRangeString(startDate:Date,endDate:Date):string {
+        return `<code>${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}</code>`
     }
 
-    parseDataToTableOutputArray(thisService:string,data:Array<Object>): Array<any> {
-        let processedData1: Array<any> = data
-            .filter((o:Object):boolean => o['Division'] == thisService)
-            .map((fields:Object):Array<any> => {
+    parseDataToTableOutputArray(thisService: string, data: Array<Object>): Array<Array<any>> {
+        let processedData1: Array<string[]> = data
+            .filter((o:Object):boolean => o['Division'] === thisService)
+            .map((fields:Object):Array<string> => {
                 let staffName = fields['Staff_Name'],
                     shiftName = fields['Shift_Name'],
                     shiftDate = fields['Date'],
                     shiftStartTime = fields['Start_Time'],
-                    shiftEndTime = fields['End_Time'];
-                let nameParts: String[] = this.processNameParts(staffName);
-                let nameStr: string = `${nameParts[1] ? nameParts[1] + " " : ""}${nameParts[0]}`;
-                let staffNumber: string;
+                    shiftEndTime = fields['End_Time'],
+                    nameParts: String[] = this.processNameParts(staffName),
+                    nameStr: string = `${nameParts[1] ? nameParts[1] + " " : ""}${nameParts[0]}`,
+                    staffNumber: string;
                 if (nameStr.match(/^(Call )?[0-9][0-9-]+$/)) {
                     nameStr = nameStr.replace(/^(Call )/,"");
                     staffNumber = nameStr.replace(/^(Call )/,"").replace(/[-_.,;]/g,"");
                 } else {
                     staffNumber = this.getStaffNumber(thisService,staffName);
                 }
-                let staffNumberLink = this.getNumberLinkHtml(staffNumber);
-                let [startDate,endDate]: Date[] = this.getDateParts(shiftDate,shiftStartTime,shiftEndTime);
-                let shiftDateStr: String = `${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}`;
-                let returnVal: Array<any> = [
+                let staffNumberLink = this.getNumberLinkHtml(staffNumber),
+                    [startDate,endDate]: Date[] = this.getDateParts(shiftDate,shiftStartTime,shiftEndTime),
+                    shiftDateStr: string = this.getDateRangeString(startDate,endDate);
+                return [
                     shiftName,
                     shiftDateStr,
                     nameStr,
                     staffNumberLink
                 ];
-                return returnVal;
             });
 
-        let processedData2: Array<any> = processedData1
+        let processedData2: Array<string[]> = processedData1
             .map((fields: Array<any>): Array<any> => {
                 let returnFields = fields;
                 if (fields[0] === 'DCMC Pediatric Hospital Medicine PCRS 709-3293') {
@@ -370,25 +405,16 @@ class AmionData {
                 }
                 return returnFields;
             });
-        
-        let processedData3: Array<any>;
+
         switch (thisService) {
-            case "Internal Medicine":
-                processedData3 = this.parseDataInternalMedicineOutput(processedData2);
-            case "Critical Care/Pulmonary":
-                processedData3 = this.parseDataCriticalCareOutput(processedData2);
-            case "Cardiology SHI":
-                processedData3 = this.parseDataCardsSHIOutput(processedData2);
-            case "Peri-Natal":
-                processedData3 = this.parseDataPeriNatalOutput(processedData2);
-            case "Cardiology STEMI":
-                processedData3 = this.parseDataCardsSTEMIOutput(processedData2);
-            case "Neurology-StrokeTC":
-                processedData3 = this.parseDataStrokeOutput(processedData2);
-            default:
-                processedData3 = processedData2;
+            case "Internal Medicine":       return this.parseDataInternalMedicineOutput(processedData2);
+            case "Critical Care/Pulmonary": return this.parseDataCriticalCareOutput(processedData2);
+            case "Cardiology SHI":          return this.parseDataCardsSHIOutput(processedData2);
+            case "Peri-Natal":              return this.parseDataPeriNatalOutput(processedData2);
+            case "Cardiology STEMI":        return this.parseDataCardsSTEMIOutput(processedData2);
+            case "Neurology-StrokeTC":      return this.parseDataStrokeOutput(processedData2);
+            default:                        return processedData2;
         }
-        return processedData3;
     }
 
     getData(): Object[] {
@@ -492,7 +518,7 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
             equal(amionData.spreadsheetId, correctSpreadsheetId, 'initializes with correct spreadsheetId - ' + correctSpreadsheetId); 
             equal(amionData.getUrl(), url, 'initializes with web url - ' + url);
             equal(amionData.getFetchUrl(), fetchUrl, 'initializes with fetch url - ' + fetchUrl);
-            equal(typeof amionData.fetchData, 'string', 'fetchData property is a string');
+            equal(typeof amionData.fetchedData, 'string', 'fetchData property is a string');
             equal(typeof amionData.doctorNumbers, 'object', 'fetchData property is an array object');
             equal(typeof amionData.parsedFetchData, 'object', 'parsedFetchData property is an array object');
         });
@@ -519,7 +545,7 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
     function testingAmionDataMethodsParseData() {
         QUnit.test('amionData method testing - parseData()', function() {
             let amionData = new AmionData(),
-                result = amionData.parseData();
+                result = amionData.parseAmionData();
             expect(1);
             equal(typeof result, 'object', 'initializes a new object');
         });
