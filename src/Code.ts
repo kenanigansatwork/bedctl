@@ -10,21 +10,11 @@
  */
 
 /**
- * GET endpoint
- * @param {Event} e event object describing GET request parameters
- * @returns {HtmlOutput} contains HTML code of specified web page
+ * Runs QUnit unit tests, and returns the results as HtmlOutput
+ * @param {GoogleAppsScript.Events.DoGet} e event object of GET request
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML of QUnit tests
  */
-const doGet = e => runQUnit();
-
-function calculateAmountAndQty(quantity,amount){
-    if(typeof (quantity) == 'undefined' || quantity == 'null' || isNaN(quantity))
-    { quantity=0; }
-    if(typeof (amount) == 'undefined' || amount == 'null' || isNaN(amount))
-    { amount=0; }
-    return (quantity * amount);
-}
-
-const runQUnit = () => {
+const runQUnit = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
     QUnit.helpers(this);
 
     function testFunctions() {
@@ -51,10 +41,26 @@ const runQUnit = () => {
     return QUnit.getHtml();
 };
 
+/**
+ * GET endpoint
+ * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
+ */
+const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => runQUnit(e);
 
-
-
-
+/**
+ * test function, used for QUnit boilerplate test suite
+ * @param {number} quantity how many quantities of items
+ * @param {number} amount how many items in each quantity
+ * @returns {number} product of the inputs
+ */
+function calculateAmountAndQty(quantity: number, amount: number):number {
+    if(!quantity || typeof (quantity) == 'undefined' || isNaN(quantity))
+    { quantity=0; }
+    if(!amount || typeof (amount) == 'undefined' || isNaN(amount))
+    { amount=0; }
+    return (quantity * amount);
+}
 
 /**
  * # QUnit Resources
