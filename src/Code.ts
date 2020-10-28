@@ -34,11 +34,11 @@ function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
             case 'tests': return runQUnit(e);
             case 'callsheet': return new Omnitool(e).getCallsheetHtmlOutput();
             case 'home': return new Omnitool(e).getHomePage();
-            default: return getHomePage();
+            default: return new Omnitool(e).getHomePage();
         }
     } catch(err) {
         Logger.log(err);
-        return getHtmlOutput(`<strong>${err.name}</strong>: ${err.message}`);
+        return HtmlService.createHtmlOutput(`<strong>${err.name}</strong>: ${err.message}`);
     }
 }
 
@@ -46,21 +46,92 @@ function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
  * CLASS: Omnitool
  */
 class Omnitool {
+    
+    e: object;
+    
     constructor(e:GoogleAppsScript.Events.DoGet) {
         this.e = e;
     }
 
     getCallsheetHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
+        let amionData = new AmionData();
         return HtmlService.createHtmlOutput('<h1>callsheet</h2>')
-            .append(`<pre>${JSON.stringify(this.e,null,4)}<\/pre>`);
+            .append(amionData.getHtmlTableData());
     }
-    // throw err code:
-    // const err = new Error('this error occurred');
-    // err.name = 'TypeError';
-    // throw err;
 
     getHomePage():GoogleAppsScript.HTML.HtmlOutput {
         return HtmlService.createHtmlOutput('<h1>Home - bedctl</h2>');
+    }
+}
+
+/**
+ * CLASS: AmionData
+ */
+class AmionData {
+    
+    url: Object;
+    getUrl: Function;
+    getFetchUrl: Function;
+    fetchData: any;
+    doctorNumbers: any;
+    spreadsheetId: string;
+
+    constructor() {
+
+        this.url = {
+            base: 'https://amion.com/cgi-bin/ocs',
+            queryString: {
+                loginStr: 'Lo=seton+bb16',
+                reportStr: 'Rpt=619tabs--'
+            }
+        }
+        this.spreadsheetId = '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8';
+        this.getUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}`; };
+        this.getFetchUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}&${this.url.queryString.reportStr}`; };
+        this.doctorNumbers = this.fetchDoctorNumbers();
+
+        try {
+            this.fetchData = this.fetchAmionData();
+        } catch(err) {
+            Logger.log('amionData.constructor Error: ', err)
+            this.fetchData = 'amionData.constructor Error: ', JSON.stringify(err);
+        }
+    }
+
+    fetchDoctorNumbers() {
+        let dataSheet = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('doctorNumbers'),
+            data = dataSheet.getRange(2,1,dataSheet.getLastRow(),dataSheet.getLastColumn())
+                .getValues();
+        return data;
+    }
+    
+    fetchAmionData() {
+        let res
+        try {
+            res = UrlFetchApp.fetch(this.getFetchUrl());
+            if (res.getResponseCode() === 200) {
+                return res.getContentText();
+            } else {
+                const err = new Error('amionData.fetchAmionData Error: response code was not 200 -- ' + JSON.stringify(res));
+                throw err;
+            }
+        } catch(err) {
+            Logger.log('amionData.fetchAmionData Error: ', err)
+            throw err;
+        }
+    }
+
+    parseData() {
+        return JSON.stringify(this.fetchData + this.doctorNumbers, null, 4);
+    }
+
+    getData() {
+        return '<pre>' + this.parseData() + '</pre>';
+    }
+
+    getHtmlTableData() {
+        //return `<table><tr><th>fetchData<\/th><td>${this.getData()}<\/td><\/tr><\/table>`;
+        return this.getData();
     }
 }
 
@@ -72,10 +143,22 @@ class Omnitool {
 function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
     QUnit.helpers(this);
 
+    QUnit.config({
+        title: "QUnit for `bedctl` - Test Suite"
+    });
+    QUnit.load(testFunctions);
+    return QUnit.getHtml();
+
     function testFunctions() {
         testingOmnitoolInitialization();
         testingOmnitoolGetCallsheetMethod();
         testingOmnitoolGetHomePageMethod();
+        testingAmionDataInitialization();
+        testingAmionDataMethodsFetchDoctorNumbers();
+        testingAmionDataMethodsFetchAmionData();
+        testingAmionDataMethodsParseData();
+        testingAmionDataMethodsGetData();
+        testingAmionDataMethodsGetHtmlTableData();
     }
 
     function testingOmnitoolInitialization() {
@@ -92,7 +175,7 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let omnitool = new Omnitool({}),
                 result = omnitool.getCallsheetHtmlOutput();
             expect(1);
-            equal(typeof result,'object','initializes a new object');
+            equal(typeof result, 'object', 'initializes a new object');
         });
     }
 
@@ -101,15 +184,68 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let omnitool = new Omnitool({}),
                 result = omnitool.getHomePage();
             expect(1);
-            equal(typeof result,'object','initializes a new object');
+            equal(typeof result, 'object', 'initializes a new object');
         });
     }
 
-    QUnit.config({
-        title: "QUnit for `bedctl` - Test Suite"
-    });
-    QUnit.load(testFunctions);
-    return QUnit.getHtml();
+    function testingAmionDataInitialization() {
+        QUnit.test('amionData initialization testing', function() {
+            let amionData = new AmionData(),
+                url = 'https://amion.com/cgi-bin/ocs?Lo=seton+bb16',
+                fetchUrl = url + '&Rpt=619tabs--';
+            expect(3);
+            equal(typeof amionData, 'object','initializes a new object');
+            equal(amionData.getUrl(), url, 'initializes with web url - ' + url);
+            equal(amionData.getFetchUrl(), fetchUrl, 'initializes with fetch url - ' + fetchUrl);
+        });
+    }
+
+    function testingAmionDataMethodsFetchDoctorNumbers() {
+        QUnit.test('amionData method testing - fetchDoctorNumbers()', function() {
+            let amionData = new AmionData(),
+                result = amionData.fetchDoctorNumbers();
+            expect(1);
+            equal(typeof result, 'object', 'fetchDoctorNumbers should initialize array object');
+        });
+    }
+
+    function testingAmionDataMethodsFetchAmionData() {
+        QUnit.test('amionData method testing - fetchAmionData()', function() {
+            let amionData = new AmionData(),
+                result = amionData.fetchAmionData();
+            expect(1);
+            equal(typeof result, 'string', 'fetchAmionData should initialize new string');
+        });
+    }
+
+    function testingAmionDataMethodsParseData() {
+        QUnit.test('amionData method testing - parseData()', function() {
+            let amionData = new AmionData(),
+                result = amionData.parseData();
+            expect(1);
+            equal(typeof result, 'string', 'initializes a new string');
+        });
+    }
+
+    function testingAmionDataMethodsGetData() {
+        QUnit.test('amionData method testing - getData()', function() {
+            let amionData = new AmionData(),
+                result = amionData.getData();
+            expect(1);
+            equal(typeof result, 'string', 'initializes a new string');
+        });
+    }
+
+    function testingAmionDataMethodsGetHtmlTableData() {
+        QUnit.test('amionData method testing - getHtmlTableData()', function() {
+            let amionData = new AmionData(),
+                amionDataGetData = amionData.getData(),
+                result = amionData.getHtmlTableData();
+            expect(2);
+            equal(typeof result, 'string', 'initializes a new string');
+            equal(result.includes(amionDataGetData), true, 'initializes a new string containing result of getData()');
+        });
+    }
 }
 
 /**
