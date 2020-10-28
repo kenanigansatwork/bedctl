@@ -70,20 +70,15 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
     QUnit.helpers(this);
 
     function testFunctions() {
-        testingCalculateAmountAndQty();
+        testingGetHtmlOutput();
     }
 
-    function testingCalculateAmountAndQty(){
-       QUnit.test( "calculateAmountAndQty testing", function() {
-          expect(7);
-          equal( calculateAmountAndQty(10,2000), 20000, "Test for quantity : 10 and amount : 2000 sp output is 20000" );
-          equal( calculateAmountAndQty("printer",2000), 0, "Test for quantity : printer and amount : 2000 so output is 0" );
-          equal( calculateAmountAndQty(10,"mouse"), 0, "Test for quantity : 10 and amount : mouse so output is 0" );
-          equal( calculateAmountAndQty(10,null), 0, "Test for quantity : 10 and amount : null so output is 0" );
-          equal( calculateAmountAndQty(null,2000), 0, "Test for quantity : null and amount : 2000 so output is 0" );
-          equal( calculateAmountAndQty(undefined,2000), 0, "Test for quantity : undefined and amount : 2000 so output is 0" );
-          equal( calculateAmountAndQty(10,undefined), 0, "Test for quantity : 10 and amount : undefined so output is 0" );
-       });
+    function testingGetHtmlOutput() {
+        QUnit.test( "generate HtmlOutput object testing", function() {
+            expect(2);
+            equal(typeof getHtmlOutput('test'), 'object', "returns an HtmlObject");
+            equal(getHtmlOutput('test').getContent().includes('test'), true, "should return content embeded in HtmlObject");
+        });
     }
 
     QUnit.config({
@@ -91,20 +86,6 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
     });
     QUnit.load(testFunctions);
     return QUnit.getHtml();
-}
-
-/**
- * test function, used for QUnit boilerplate test suite
- * @param {number} quantity how many quantities of items
- * @param {number} amount how many items in each quantity
- * @returns {number} product of the inputs
- */
-function calculateAmountAndQty(quantity: number, amount: number):number {
-    if(!quantity || typeof (quantity) == 'undefined' || isNaN(quantity))
-    { quantity=0; }
-    if(!amount || typeof (amount) == 'undefined' || isNaN(amount))
-    { amount=0; }
-    return (quantity * amount);
 }
 
 /**
