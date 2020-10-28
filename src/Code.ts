@@ -9,6 +9,9 @@
  *                                        executions: https://script.google.com/home/projects/13LYGFiiS6aAY7auHNST2CTrffKoTx5oL5HSGmFNYMK5IIU4NgOGt7VAU/executions
  */
 
+ /**
+  * typescript definitions for QUnit library
+  */
 declare namespace QUnit {
     let helpers: any,
         config: any,
@@ -20,6 +23,9 @@ declare namespace QUnit {
     }
 };
 
+/**
+ * typescript definitions GET request event object
+ */
 declare interface getRequestEvent {
     parameter: {
         route: string
@@ -28,10 +34,16 @@ declare interface getRequestEvent {
     queryString: string;
 }
 
+/**
+ * typescript definitions for globals object
+ */
 declare interface globals {
     String:any;
 }
 
+/**
+ * global shared data
+ */
 const globals = {
     spreadsheetId: '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8'
 }
@@ -77,16 +89,28 @@ class Omnitool {
     e: object;
     spreadsheetId: string;
     
-    constructor(e:any) {
+    /**
+     * constructor for Omnitool class
+     * @param {getRequestEvent} e the get request event object
+     */
+    constructor(e:getRequestEvent) {
         this.e = e;
         this.spreadsheetId = globals.spreadsheetId;
     }
 
+    /**
+     * returns basic HtmlOutput that should prepend any returned HtmlOutput
+     * @returns {GoogleAppsScript.HTML.HtmlOutput} HtmlOutput shared header
+     */
     getHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
         return HtmlService.createHtmlOutput()
             .append('<link rel="stylesheet" href="https://bootswatch.com/4/cerulean/bootstrap.min.css">');
     }
 
+    /**
+     * returns callsheet HtmlOutput
+     * @returns {GoogleAppsScript.HTML.HtmlOutput} callsheet HtmlOutput data
+     */
     getCallsheetHtmlOutput():GoogleAppsScript.HTML.HtmlOutput {
         let amionData = new AmionData();
         return this.getHtmlOutput()
@@ -95,6 +119,10 @@ class Omnitool {
             .append('</div>');
     }
 
+    /**
+     * returns home page as HtmlOutput
+     * @returns {GoogleAppsScript.HTML.HtmlOutput} home page HtmlOutput data
+     */
     getHomePage():GoogleAppsScript.HTML.HtmlOutput {
         return HtmlService.createHtmlOutput('<h1>Home - bedctl</h2>');
     }
@@ -120,6 +148,10 @@ class AmionData {
 
     parsedAmionHeaders: string[];
 
+    /**
+     * constructor for AmionData class
+     * @throws throws error at failure points
+     */
     constructor() {
 
         try {
@@ -149,6 +181,10 @@ class AmionData {
 
     }
 
+    /**
+     * fetch and return includedServices from the linked spreadsheet
+     * @returns {string[]} single-dimensional array of services to include on the callsheet
+     */
     fetchIncludedServices(): string[] {
         let wb = SpreadsheetApp.openById(this.spreadsheetId),
             ws = wb.getSheetByName('includedDivisions'),
@@ -157,14 +193,22 @@ class AmionData {
             .map(arr => arr[0]);
     }
 
+    /**
+     * fetch and return all of the doctor phone number data from the linked spreadsheet
+     * @returns {Array<any>} the 2-dimensional data of doctor data
+     */
     fetchDoctorNumbers(): Array<any> {
         let dataSheet = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('doctorNumbers'),
             data = dataSheet.getRange(2,1,dataSheet.getLastRow(),4)
                 .getValues();
-                
         return data;
     }
     
+    /**
+     * fetch and return the amion fetch request data as string
+     * @returns {string} the amion fetch request data
+     * @throws if fetch fails
+     */
     fetchAmionData():string {
         let res:GoogleAppsScript.URL_Fetch.HTTPResponse
         try {
@@ -181,6 +225,10 @@ class AmionData {
         }
     }
 
+    /**
+     * processed raw fetch data (this.fetchedData) into array of objects
+     * @returns {Object[]} raw fetch data as object array
+     */
     parseAmionData(): Object[] {
         // return JSON.stringify(this.doctorNumbers.filter(arr => arr[0] !== ""), null, 4);
         let lines: string[] = this.fetchedData.split('\n'),
@@ -202,6 +250,13 @@ class AmionData {
         return outputArr;
     }
 
+    /**
+     * return array of start date and end date, both as date objects
+     * @param {string} dateStr amion data date string
+     * @param {string} startTimeStr amion data start time string
+     * @param {string} endTimeStr amion data end time string
+     * @returns {Array<Date>} date array, index 0 is start date, index 1 is end date
+     */
     getDateParts(dateStr,startTimeStr:string,endTimeStr): Date[] {
         let startHH = parseInt(startTimeStr.substring(0,2)),
             startMM = parseInt(startTimeStr.substring(2,4)),
@@ -221,6 +276,11 @@ class AmionData {
         return [startDate,endDate];
     }
 
+    /**
+     * Provided phone number lookup, returns "ERR" if not found
+     * @param {string} service specified service
+     * @param {string} nameStr name string from data
+     */
     getStaffNumber(service:string,nameStr:string): string {
         let nameParts: string[] = this.processNameParts(nameStr),
             [lastName,firstName,...rest] = nameParts,
@@ -231,6 +291,10 @@ class AmionData {
         return firstMatch ? firstMatch[firstMatch.length - 1] : 'ERR';
     }
 
+    /**
+     * return string representation of a single Date object
+     * @param {Date} date input date object
+     */
     getDateStr(date:Date): string {
         function padToTwoWithZeroes(str:string):string {
             let input = str;
@@ -249,6 +313,11 @@ class AmionData {
         return `${HH}:${MM}`;
     }
 
+    /**
+     * get "callto:" protocol link to specified phone number
+     * @param numberStr phone number string from the data
+     * @returns {string} HTML link incorporating "callto:" protocol
+     */
     getNumberLinkHtml(numberStr:string):string {
         const localAreaCode = '512';
         if (numberStr.length < 10) return numberStr;
@@ -267,6 +336,21 @@ class AmionData {
         return `<a href="${href}">${textNumber}<\/a>`;
     }
 
+    /**
+     * returns string representation of shift time bounds
+     * @param {Date} startDate shift start date
+     * @param {Date} endDate shift end date
+     * @returns {string} displayed shift range string
+     */
+    getDateRangeString(startDate:Date,endDate:Date):string {
+        return `<code>${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}</code>`
+    }
+
+    /**
+     * split and normalize name string
+     * @param {string} nameStr string of Provider's full name
+     * @returns {string[]} array of strings, index 0 is last name, index 1 is first name
+     */
     processNameParts(nameStr:String): string[] {
         let parts = nameStr.split(/,? /g); 
         parts = parts.map(str => str.trim());   // trim whitespace from all array parts
@@ -284,13 +368,23 @@ class AmionData {
         return parts;
     }
 
-    parseDataPeriNatalOutput(data: Array<any>): Array<string[]> {
+    /**
+     * parse shift data for Peri-Natal service
+     * @param {Array<string[]>} data shift data
+     * @returns {Array<string[]>} parsed shift data
+     */
+    parseDataPeriNatalOutput(data: Array<string[]>): Array<string[]> {
         let input:Array<any> = data
             .filter((arr:Array<any>): boolean => !arr[1].endsWith('SMCW Maternal-Fetal'));
         return input;
     }
 
-    parseDataCardsSTEMIOutput(data: Array<any>): Array<string[]> {
+    /**
+     * parse shift data for cardiology STEMI service
+     * @param {Array<string[]>} data shift data
+     * @returns {Array<string[]>} parsed shift data
+     */
+    parseDataCardsSTEMIOutput(data: Array<string[]>): Array<string[]> {
         let input:Array<any> = data
             .map((arr:Array<string>): Array<string> => {
                 let outputArr = arr;
@@ -302,12 +396,22 @@ class AmionData {
         return input;
     }
 
+    /**
+     * parse shift data for Stroke service
+     * @param {Array<string[]>} data shift data
+     * @returns {Array<string[]>} parsed shift data
+     */
     parseDataStrokeOutput(data: Array<any>): Array<string[]> {
         let input:Array<any> = data
             .filter((arr:Array<string>): boolean => arr[0] != 'Sound Telemedicine' && !arr[0].includes('('));
         return input;
     }
 
+    /**
+     * parse shift data for Internal Medicine service
+     * @param {Array<string[]>} data shift data
+     * @returns {Array<string[]>} parsed shift data
+     */
     parseDataInternalMedicineOutput(data: Array<string[]>): Array<any> {
         let numbers = {
             SMCA: '5129621642',
@@ -351,23 +455,35 @@ class AmionData {
         return input;
     }
 
+    /**
+     * parse shift data for Critical Care service
+     * @param {Array<string[]>} data shift data
+     * @returns {Array<string[]>} parsed shift data
+     */
     parseDataCriticalCareOutput(data: Array<string[]>): Array<any> {
         let input:Array<any> = data
             .filter((arr:Array<any>): boolean => !arr[0].includes(' Pulmonary Consults'));
         return input;
     }
 
+    /**
+     * parse shift data for General Cardiology service
+     * @param {Array<string[]>} data shift data
+     * @returns {Array<string[]>} parsed shift data
+     */
     parseDataCardsSHIOutput(data: Array<string[]>): Array<any> {
         let input:Array<any> = data
             .filter((arr:Array<any>): boolean => !arr[0].includes('EP SHI') && !arr[0].includes('SNW ') && !arr[0].includes('STEMI'));
         return input;
     }
 
-    getDateRangeString(startDate:Date,endDate:Date):string {
-        return `<code>${this.getDateStr(startDate)} &ndash; ${this.getDateStr(endDate)}</code>`
-    }
-
-    parseDataToTableOutputArray(thisService: string, data: Array<Object>): Array<Array<any>> {
+    /**
+     * process each service's shift data
+     * @param {string} thisService name of the current service to parse
+     * @param {Array<Object>} data object array of each shift on the callsheet
+     * @returns {Array<string>} parsed data string array of each shift for the specified service
+     */
+    parseDataToTableOutputArray(thisService: string, data: Array<Object>): Array<string[]> {
         let processedData1: Array<string[]> = data
             .filter((o:Object):boolean => o['Division'] === thisService)
             .map((fields:Object):Array<string> => {
@@ -417,10 +533,18 @@ class AmionData {
         }
     }
 
+    /**
+     * gets the raw stored data
+     * @returns {Object[]} the stored callsheet data, array of objects
+     */
     getData(): Object[] {
         return this.parsedFetchData;
     }
 
+    /**
+     * forms the callsheet data as HTML table
+     * @returns {string} HTML table data as string
+     */
     getHtmlTableData():string {
         let data = this.getData();
         // begin table HTML
@@ -477,6 +601,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         testingAmionDataMethodsprocessNameParts();
     }
 
+    /**
+     * test Omnitool initialization
+     */
     function testingOmnitoolInitialization() {
         QUnit.test( "omnitool initialization testing", function() {
             let event: getRequestEvent = {parameter: {route: 'home'},parameters: {route: ['home']}, queryString: 'route=home'},
@@ -489,6 +616,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test Omnitool method: getCallsheetHtmlOutput
+     */
     function testingOmnitoolGetCallsheetMethod() {
         QUnit.test( "omnitool mehod testing - getCallsheetHtmlOutput", function() {
             let omnitool = new Omnitool({}),
@@ -498,6 +628,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test Omnitool method: getHomePage
+     */
     function testingOmnitoolGetHomePageMethod() {
         QUnit.test( "omnitool mehod testing - getHomePage", function() {
             let omnitool = new Omnitool({}),
@@ -507,6 +640,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test AmionData initialization
+     */
     function testingAmionDataInitialization() {
         QUnit.test('amionData initialization testing', function() {
             let amionData = new AmionData(),
@@ -524,6 +660,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test AmionData method: fetchDoctorNumbers
+     */
     function testingAmionDataMethodsFetchDoctorNumbers() {
         QUnit.test('amionData method testing - fetchDoctorNumbers()', function() {
             let amionData = new AmionData(),
@@ -533,6 +672,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test AmionData method: fetchAmionData
+     */
     function testingAmionDataMethodsFetchAmionData() {
         QUnit.test('amionData method testing - fetchAmionData()', function() {
             let amionData = new AmionData(),
@@ -542,6 +684,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test AmionData method: parseAmionData
+     */
     function testingAmionDataMethodsParseData() {
         QUnit.test('amionData method testing - parseData()', function() {
             let amionData = new AmionData(),
@@ -551,6 +696,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test AmionData method: getData
+     */
     function testingAmionDataMethodsGetData() {
         QUnit.test('amionData method testing - getData()', function() {
             let amionData = new AmionData(),
@@ -560,6 +708,9 @@ function runQUnitTests(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
         });
     }
 
+    /**
+     * test AmionData method: getHtmlTableData
+     */
     function testingAmionDataMethodsGetHtmlTableData() {
         QUnit.test('amionData method testing - getHtmlTableData()', function() {
             let amionData = new AmionData(),
