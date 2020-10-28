@@ -9,21 +9,42 @@
  *                                        executions: https://script.google.com/home/projects/13LYGFiiS6aAY7auHNST2CTrffKoTx5oL5HSGmFNYMK5IIU4NgOGt7VAU/executions
  */
 
+declare namespace QUnit {
+    let helpers: any,
+        config: any,
+        load: any,
+        getHtml: any,
+        qunitTestFunction: () => {
+            expect: any,
+                equal: any,
+                deepEqual: any;
+        },
+        test: (str:string,cb:() => {}) => {};
+};
+
+declare interface getRequestEvent {
+    parameter: {
+        route: string
+    };
+    parameters: Object;
+    queryString: string;
+}
+
 /**
  * GET endpoint
- * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
+ * @param {getRequestEvent} e event object describing GET request parameters
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
  */
-const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
+const doGet = (e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput => {
     return processGetRequest(e || {});
 }
 
 /**
  * Process GET request (call from doGet(e))
- * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
+ * @param {getRequestEvent} e event object describing GET request parameters
  * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML output of specified webpage;
  */
-function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+function processGetRequest(e: getRequestEvent): GoogleAppsScript.HTML.HtmlOutput {
     // assign default route
     // - route should be string property of the object property "parameter" of the event object (e)
     let defaultRoute = 'home'
@@ -49,7 +70,7 @@ class Omnitool {
     
     e: object;
     
-    constructor(e:GoogleAppsScript.Events.DoGet) {
+    constructor(e:any) {
         this.e = e;
     }
 
@@ -75,6 +96,10 @@ class AmionData {
     fetchData: any;
     doctorNumbers: any;
     spreadsheetId: string;
+    parsedFetchData: Object[];
+    includedServices: String[];
+    requestDateTime: Date;
+    headers: String[];
 
     constructor() {
 
@@ -89,23 +114,27 @@ class AmionData {
         this.getUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}`; };
         this.getFetchUrl = function() { return `${this.url.base}?${this.url.queryString.loginStr}&${this.url.queryString.reportStr}`; };
         this.doctorNumbers = this.fetchDoctorNumbers();
+        this.includedServices = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('includedDivisions').getDataRange().getValues()
+            .map(arr => arr[0]);
+        this.requestDateTime = new Date;
 
         try {
             this.fetchData = this.fetchAmionData();
+            this.parsedFetchData = this.parseData();
         } catch(err) {
             Logger.log('amionData.constructor Error: ', err)
             this.fetchData = 'amionData.constructor Error: ', JSON.stringify(err);
         }
     }
 
-    fetchDoctorNumbers() {
+    fetchDoctorNumbers(): Array<any> {
         let dataSheet = SpreadsheetApp.openById(this.spreadsheetId).getSheetByName('doctorNumbers'),
             data = dataSheet.getRange(2,1,dataSheet.getLastRow(),dataSheet.getLastColumn())
                 .getValues();
         return data;
     }
     
-    fetchAmionData() {
+    fetchAmionData():string {
         let res
         try {
             res = UrlFetchApp.fetch(this.getFetchUrl());
@@ -121,17 +150,74 @@ class AmionData {
         }
     }
 
-    parseData() {
-        return JSON.stringify(this.fetchData + this.doctorNumbers, null, 4);
+    parseData(): Object[] {
+        // return JSON.stringify(this.doctorNumbers.filter(arr => arr[0] !== ""), null, 4);
+        let lines = this.fetchData.split('\n');
+        lines = lines.map(arr => arr.split('\t'));
+        const headers: String[] = lines.shift();
+        if (!this.headers) this.headers = headers;
+        const outputArr:Object[] = [];
+        for (let k in lines) {
+            let thisVal: String[] = lines[k],
+                thisObj:Object = {};
+            for (let k2 in thisVal) {
+                let thisValVal:String =  thisVal[k2],
+                    thisHeader:String = headers[k2]
+                thisObj[`${thisHeader}`] = thisValVal;
+                if (thisHeader === 'Staff_Name')  {
+                    thisObj[`${thisHeader}_Parts`] = this.processNameParts(thisValVal);
+                }
+            }
+            outputArr.push(thisObj);
+        }
+        return outputArr;
     }
 
-    getData() {
-        return '<pre>' + this.parseData() + '</pre>';
+    parseFilteredData(): Object[] {
+        return this.parseData().filter(obj => this.includedServices.includes(obj['Division']));
     }
 
-    getHtmlTableData() {
+    getData(): Object[] {
+        return this.parseFilteredData();
+    }
+
+    getHtmlTableData():string {
         //return `<table><tr><th>fetchData<\/th><td>${this.getData()}<\/td><\/tr><\/table>`;
-        return this.getData();
+        let data = this.getData();
+        let output = '<table>';
+        for (let k1 in this.includedServices) {
+            let thisService = this.includedServices[k1];
+            output += '<tr><th colspan="' + this.headers.length.toString() + '">' + thisService + '</th></tr>';
+            let theseObj = data.filter(o => o['Service'] === thisService);
+            for (let k2 in theseObj) {
+                let thisObj = theseObj[k2];
+                output += '<tr>'
+                for (let k3 in thisObj) {
+                    let field = thisObj[k3];
+                    output += '<td>' + field + '</td>';
+                }
+                output += '</tr>'
+            }
+        }
+        output += '</table>';
+        return output;
+    }
+
+    processNameParts(nameStr:String): String[] {
+        let parts = nameStr.split(/,? /); 
+        parts = parts.map(str => str.trim());   // trim whitespace from all array parts
+        parts = parts.filter(str => str != ''); // filter out blank strings
+        if (!nameStr.includes(",")) {
+            if (parts.length === 2) {
+                parts = [parts[1], parts[0]];
+            } else if (parts.length === 3) {
+                parts = [parts[2], parts[0], parts[1]];
+            } else {
+                let lastName = parts.pop();
+                parts = [lastName, ...parts];
+            }
+        }
+        return parts;
     }
 }
 
@@ -159,6 +245,7 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
         testingAmionDataMethodsParseData();
         testingAmionDataMethodsGetData();
         testingAmionDataMethodsGetHtmlTableData();
+        testingAmionDataMethodsprocessNameParts();
     }
 
     function testingOmnitoolInitialization() {
@@ -193,10 +280,14 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let amionData = new AmionData(),
                 url = 'https://amion.com/cgi-bin/ocs?Lo=seton+bb16',
                 fetchUrl = url + '&Rpt=619tabs--';
-            expect(3);
+            expect(7);
             equal(typeof amionData, 'object','initializes a new object');
+            equal(amionData.spreadsheetId, '17CMFjobXtUjIASHg75ps3dUhbhhaZNdLsdO5eF18MF8');
             equal(amionData.getUrl(), url, 'initializes with web url - ' + url);
             equal(amionData.getFetchUrl(), fetchUrl, 'initializes with fetch url - ' + fetchUrl);
+            equal(typeof amionData.fetchData, 'string', 'fetchData property is a string');
+            equal(typeof amionData.doctorNumbers, 'object', 'fetchData property is an array object');
+            equal(typeof amionData.parsedFetchData, 'object', 'parsedFetchData property is an array object');
         });
     }
 
@@ -223,7 +314,7 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             let amionData = new AmionData(),
                 result = amionData.parseData();
             expect(1);
-            equal(typeof result, 'string', 'initializes a new string');
+            equal(typeof result, 'object', 'initializes a new object');
         });
     }
 
@@ -246,6 +337,41 @@ function runQUnit(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlO
             equal(result.includes(amionDataGetData), true, 'initializes a new string containing result of getData()');
         });
     }
+
+
+    /**
+     * test AmionData helperFunction -- processNameParts(nameStr)
+     */
+    function testingAmionDataMethodsprocessNameParts() {
+        let amionData = new AmionData(),
+            lastName = "Dait",
+            firstName = "Kenneth",
+            middleInitial = "P.",
+            testNames = [
+                "Kenneth Dait:2",
+                "Dait, Kenneth:2",
+                "Kenneth P. Dait:3",
+                "Dait, Kenneth P.:3",
+                "Kenneth    Dait:2",
+                "Kenneth P.    Dait:3"
+            ];
+        QUnit.test("amionData method testing -- processNameParts(nameStr)", function() {
+            expect(testNames.length * 3 + testNames.filter(str => str.includes(middleInitial)).length);
+            for (let nameStr of testNames) {
+                let name = nameStr.split(":")[0];
+                let nameLength = nameStr.split(":")[1];
+                let result = amionData.processNameParts(name);
+                equal(result.length, nameLength, `process name ("${name}") into ${nameLength} parts : ${JSON.stringify(result)}`);
+                equal(result[0], lastName, `field one of parts (of: ${name}) should be "${lastName}"`);
+                equal(result[1], firstName, `field two of parts (of: ${name}) should be "${firstName}"`);
+                if (nameLength > 2) {
+                    equal(result[2], middleInitial, `field three of parts (of: ${name}) should be "${middleInitial}"`);
+                }
+            }
+        });
+    } // end testingAmionDataMethodsprocessNameParts()
+
+    
 }
 
 /**
