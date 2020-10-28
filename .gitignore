@@ -1,0 +1,5 @@
+.DS_Store
+.localized
+.*.sw[a-z]
+
+.clasp.json
