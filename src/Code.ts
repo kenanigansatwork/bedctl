@@ -15,8 +15,47 @@
  * @returns {GoogleAppsScript.HTML.HtmlOutput} contains HTML code of specified web page
  */
 const doGet = (e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput => {
-    e = e || {parameter:{},parameters:{},queryString:''};
-    return runQUnit(e);
+    return runQUnit(e || null);
+}
+
+/**
+ * Process GET request (call from doGet(e))
+ * @param {GoogleAppsScript.Events.DoGet} e event object describing GET request parameters
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML output of specified webpage;
+ */
+function processGetRequest(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+    // assign default route
+    // - route should be string property of the object property "parameter" of the event object (e)
+    let defaultRoute = 'home'
+    let route = e.parameter.route || defaultRoute;
+    
+    switch (route) {
+        case 'tests': return runQUnit(e);
+        case 'callsheet': return getCallsheet();
+        default: return getHomePage();
+    }
+}
+
+/**
+ * return the callsheet page
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML code of the callsheet page
+ */
+function getCallsheet():GoogleAppsScript.HTML.HtmlOutput {
+    return getHtmlOutput('<h1>callsheet</h2>')
+}
+
+/**
+ * return the home page
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML code of the home page
+ */
+function getHomePage():GoogleAppsScript.HTML.HtmlOutput {
+    return getHtmlOutput('<h1>home</h2>')
+}
+
+function getHtmlOutput(content:string):GoogleAppsScript.HTML.HtmlOutput {
+    let html = HtmlService.createHtmlOutput();
+    html.append(content);
+    return html;
 }
 
 /**
