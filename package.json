@@ -1,0 +1,28 @@
+{
+  "name": "bedctl",
+  "version": "0.0.1",
+  "description": "a google apps script project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/kpdait/bedctl.git"
+  },
+  "keywords": [
+    "google-apps-script",
+    "clasp",
+    "javascript"
+  ],
+  "author": "Kenneth Dait",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kpdait/bedctl/issues"
+  },
+  "homepage": "https://github.com/kpdait/bedctl#readme",
+  "devDependencies": {
+    "clasp": "^1.0.0",
+    "typescript": "^4.0.5"
+  }
+}
