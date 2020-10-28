@@ -16,3 +16,16 @@
  */
 const doGet = e => HtmlService.createHtmlOutput("<h1>bedctl</h1>");
 
+
+/**
+ * # QUnit Resources
+ *
+ * - QUnit Library Code:                           MxL38OxqIK-B73jyDTvCe-OBao7QLBR4j
+ * - "How to test Google Apps Script using Qunit": https://www.tothenew.com/blog/how-to-test-google-apps-script-using-qunit/
+ * - qUnit home:                                   https://qunitjs.com/
+ * - qUnit home - main methods:                    https://api.qunitjs.com/QUnit/
+ * - qUnit home - assertions:                      https://api.qunitjs.com/assert/
+ * - CDN JS:                                       https://code.jquery.com/qunit/qunit-2.11.3.js
+ * - CDN CSS:                                      https://code.jquery.com/qunit/qunit-2.11.3.css
+ * - qUnit NPM:                                    `npm install --save-dev qunit`
+ */
