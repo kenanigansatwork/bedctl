@@ -381,7 +381,7 @@ class AmionData
         const areaCode:string = numberStr2.toString().substr(0,3),
               middleNumbers:string = numberStr2.toString().substr(3,3),
               lastNumbers:string = numberStr2.toString().substr(6,4);
-        let href:string = "callto: "
+        let href:string = "tel: "
         if (areaCode === localAreaCode)
         {
             href += '9-';
