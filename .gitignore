@@ -2,4 +2,3 @@
 .localized
 .*.sw[a-z]
 node_modules/
-.clasp.json
